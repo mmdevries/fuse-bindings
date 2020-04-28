@@ -1260,10 +1260,10 @@ NAN_METHOD(Mount) {
   strcpy(b->mnt, *path);
   strcpy(b->mntopts, "-o");
 
-  Local<Array> options = ops->Get(LOCAL_STRING("options")).As<Array>();
+  Local<Array> options = ops->Get(context, LOCAL_STRING("options")).ToLocalChecked().As<Array>();
   if (options->IsArray()) {
     for (uint32_t i = 0; i < options->Length(); i++) {
-      Nan::Utf8String option(options->Get(i));
+      Nan::Utf8String option(options->Get(context, i).ToLocalChecked());
       if (strcmp(b->mntopts, "-o")) strcat(b->mntopts, ",");
       strcat(b->mntopts, *option);
     }
