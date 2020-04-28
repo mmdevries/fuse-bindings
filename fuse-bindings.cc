@@ -28,9 +28,10 @@
 #include "abstractions.h"
 
 using namespace v8;
+using Nan::To;
 
 #define LOCAL_STRING(s) Nan::New<String>(s).ToLocalChecked()
-#define LOOKUP_CALLBACK(map, name) map->Has(LOCAL_STRING(name)) ? new Nan::Callback(map->Get(LOCAL_STRING(name)).As<Function>()) : NULL
+#define LOOKUP_CALLBACK(ctx, map, name) map->Has(ctx, LOCAL_STRING(name)).FromJust() ? new Nan::Callback(map->Get(ctx, LOCAL_STRING(name)).ToLocalChecked().As<Function>()) : NULL
 
 enum bindings_ops_t {
   OP_INIT = 0,
@@ -177,7 +178,7 @@ static int bindings_unmount (char *path) {
 }
 
 #if (NODE_MODULE_VERSION > NODE_0_10_MODULE_VERSION && NODE_MODULE_VERSION < IOJS_3_0_MODULE_VERSION)
-NAN_INLINE v8::Local<v8::Object> bindings_buffer (char *data, size_t length) {
+NAN_INLINE Local<Object> bindings_buffer (char *data, size_t length) {
   Local<Object> buf = Nan::New(buffer_constructor)->NewInstance(0, NULL);
   Local<String> k = LOCAL_STRING("length");
   Local<Number> v = Nan::New<Number>(length);
@@ -187,7 +188,7 @@ NAN_INLINE v8::Local<v8::Object> bindings_buffer (char *data, size_t length) {
 }
 #else
 void noop (char *data, void *hint) {}
-NAN_INLINE v8::Local<v8::Object> bindings_buffer (char *data, size_t length) {
+NAN_INLINE Local<Object> bindings_buffer (char *data, size_t length) {
   return Nan::NewBuffer(data, length, noop, NULL).ToLocalChecked();
 }
 #endif
@@ -737,8 +738,8 @@ NAN_INLINE static Local<Date> bindings_get_date (struct timespec *out) {
   return Nan::New<Date>(out->tv_sec * 1000 + ms).ToLocalChecked();
 }
 
-NAN_INLINE static void bindings_set_date (struct timespec *out, Local<Date> date) {
-  double ms = date->NumberValue();
+NAN_INLINE static void bindings_set_date (Local<Context> context, struct timespec *out, Local<Date> date) {
+  double ms = date->NumberValue(context).FromJust();
   time_t secs = (time_t)(ms / 1000.0);
   time_t rem = ms - (1000.0 * secs);
   time_t ns = rem * 1000000.0;
@@ -746,40 +747,40 @@ NAN_INLINE static void bindings_set_date (struct timespec *out, Local<Date> date
   out->tv_nsec = ns;
 }
 
-NAN_INLINE static void bindings_set_stat (struct FUSE_STAT *stat, Local<Object> obj) {
-  if (obj->Has(LOCAL_STRING("dev"))) stat->st_dev = obj->Get(LOCAL_STRING("dev"))->NumberValue();
-  if (obj->Has(LOCAL_STRING("ino"))) stat->st_ino = obj->Get(LOCAL_STRING("ino"))->NumberValue();
-  if (obj->Has(LOCAL_STRING("mode"))) stat->st_mode = obj->Get(LOCAL_STRING("mode"))->Uint32Value();
-  if (obj->Has(LOCAL_STRING("nlink"))) stat->st_nlink = obj->Get(LOCAL_STRING("nlink"))->NumberValue();
-  if (obj->Has(LOCAL_STRING("uid"))) stat->st_uid = obj->Get(LOCAL_STRING("uid"))->NumberValue();
-  if (obj->Has(LOCAL_STRING("gid"))) stat->st_gid = obj->Get(LOCAL_STRING("gid"))->NumberValue();
-  if (obj->Has(LOCAL_STRING("rdev"))) stat->st_rdev = obj->Get(LOCAL_STRING("rdev"))->NumberValue();
-  if (obj->Has(LOCAL_STRING("size"))) stat->st_size = obj->Get(LOCAL_STRING("size"))->NumberValue();
-  if (obj->Has(LOCAL_STRING("blocks"))) stat->st_blocks = obj->Get(LOCAL_STRING("blocks"))->NumberValue();
-  if (obj->Has(LOCAL_STRING("blksize"))) stat->st_blksize = obj->Get(LOCAL_STRING("blksize"))->NumberValue();
+NAN_INLINE static void bindings_set_stat (Local<Context> context, struct FUSE_STAT *stat, Local<Object> obj) {
+  if (obj->Has(context, LOCAL_STRING("dev")).FromJust()) stat->st_dev = obj->Get(context, LOCAL_STRING("dev")).ToLocalChecked()->NumberValue(context).FromJust();
+  if (obj->Has(context, LOCAL_STRING("ino")).FromJust()) stat->st_ino = obj->Get(context, LOCAL_STRING("ino")).ToLocalChecked()->NumberValue(context).FromJust();
+  if (obj->Has(context, LOCAL_STRING("mode")).FromJust()) stat->st_mode = obj->Get(context, LOCAL_STRING("mode")).ToLocalChecked()->Uint32Value(context).FromJust();
+  if (obj->Has(context, LOCAL_STRING("nlink")).FromJust()) stat->st_nlink = obj->Get(context, LOCAL_STRING("nlink")).ToLocalChecked()->NumberValue(context).FromJust();
+  if (obj->Has(context, LOCAL_STRING("uid")).FromJust()) stat->st_uid = obj->Get(context, LOCAL_STRING("uid")).ToLocalChecked()->NumberValue(context).FromJust();
+  if (obj->Has(context, LOCAL_STRING("gid")).FromJust()) stat->st_gid = obj->Get(context, LOCAL_STRING("gid")).ToLocalChecked()->NumberValue(context).FromJust();
+  if (obj->Has(context, LOCAL_STRING("rdev")).FromJust()) stat->st_rdev = obj->Get(context, LOCAL_STRING("rdev")).ToLocalChecked()->NumberValue(context).FromJust();
+  if (obj->Has(context, LOCAL_STRING("size")).FromJust()) stat->st_size = obj->Get(context, LOCAL_STRING("size")).ToLocalChecked()->NumberValue(context).FromJust();
+  if (obj->Has(context, LOCAL_STRING("blocks")).FromJust()) stat->st_blocks = obj->Get(context, LOCAL_STRING("blocks")).ToLocalChecked()->NumberValue(context).FromJust();
+  if (obj->Has(context, LOCAL_STRING("blksize")).FromJust()) stat->st_blksize = obj->Get(context, LOCAL_STRING("blksize")).ToLocalChecked()->NumberValue(context).FromJust();
 #ifdef __APPLE__
-  if (obj->Has(LOCAL_STRING("mtime"))) bindings_set_date(&stat->st_mtimespec, obj->Get(LOCAL_STRING("mtime")).As<Date>());
-  if (obj->Has(LOCAL_STRING("ctime"))) bindings_set_date(&stat->st_ctimespec, obj->Get(LOCAL_STRING("ctime")).As<Date>());
-  if (obj->Has(LOCAL_STRING("atime"))) bindings_set_date(&stat->st_atimespec, obj->Get(LOCAL_STRING("atime")).As<Date>());
+  if (obj->Has(context, LOCAL_STRING("mtime")).FromJust()) bindings_set_date(context, &stat->st_mtimespec, obj->Get(context, LOCAL_STRING("mtime")).ToLocalChecked().As<Date>());
+  if (obj->Has(context, LOCAL_STRING("ctime")).FromJust()) bindings_set_date(context, &stat->st_ctimespec, obj->Get(context, LOCAL_STRING("ctime")).ToLocalChecked().As<Date>());
+  if (obj->Has(context, LOCAL_STRING("atime")).FromJust()) bindings_set_date(context, &stat->st_atimespec, obj->Get(context, LOCAL_STRING("atime")).ToLocalChecked().As<Date>());
 #else
-  if (obj->Has(LOCAL_STRING("mtime"))) bindings_set_date(&stat->st_mtim, obj->Get(LOCAL_STRING("mtime")).As<Date>());
-  if (obj->Has(LOCAL_STRING("ctime"))) bindings_set_date(&stat->st_ctim, obj->Get(LOCAL_STRING("ctime")).As<Date>());
-  if (obj->Has(LOCAL_STRING("atime"))) bindings_set_date(&stat->st_atim, obj->Get(LOCAL_STRING("atime")).As<Date>());
+  if (obj->Has(context, LOCAL_STRING("mtime")).FromJust()) bindings_set_date(context, &stat->st_mtim, obj->Get(context, LOCAL_STRING("mtime")).ToLocalChecked().As<Date>());
+  if (obj->Has(context, LOCAL_STRING("ctime")).FromJust()) bindings_set_date(context, &stat->st_ctim, obj->Get(context, LOCAL_STRING("ctime")).ToLocalChecked().As<Date>());
+  if (obj->Has(context, LOCAL_STRING("atime")).FromJust()) bindings_set_date(context, &stat->st_atim, obj->Get(context, LOCAL_STRING("atime")).ToLocalChecked().As<Date>());
 #endif
 }
 
-NAN_INLINE static void bindings_set_statfs (struct statvfs *statfs, Local<Object> obj) { // from http://linux.die.net/man/2/stat
-  if (obj->Has(LOCAL_STRING("bsize"))) statfs->f_bsize = obj->Get(LOCAL_STRING("bsize"))->Uint32Value();
-  if (obj->Has(LOCAL_STRING("frsize"))) statfs->f_frsize = obj->Get(LOCAL_STRING("frsize"))->Uint32Value();
-  if (obj->Has(LOCAL_STRING("blocks"))) statfs->f_blocks = obj->Get(LOCAL_STRING("blocks"))->Uint32Value();
-  if (obj->Has(LOCAL_STRING("bfree"))) statfs->f_bfree = obj->Get(LOCAL_STRING("bfree"))->Uint32Value();
-  if (obj->Has(LOCAL_STRING("bavail"))) statfs->f_bavail = obj->Get(LOCAL_STRING("bavail"))->Uint32Value();
-  if (obj->Has(LOCAL_STRING("files"))) statfs->f_files = obj->Get(LOCAL_STRING("files"))->Uint32Value();
-  if (obj->Has(LOCAL_STRING("ffree"))) statfs->f_ffree = obj->Get(LOCAL_STRING("ffree"))->Uint32Value();
-  if (obj->Has(LOCAL_STRING("favail"))) statfs->f_favail = obj->Get(LOCAL_STRING("favail"))->Uint32Value();
-  if (obj->Has(LOCAL_STRING("fsid"))) statfs->f_fsid = obj->Get(LOCAL_STRING("fsid"))->Uint32Value();
-  if (obj->Has(LOCAL_STRING("flag"))) statfs->f_flag = obj->Get(LOCAL_STRING("flag"))->Uint32Value();
-  if (obj->Has(LOCAL_STRING("namemax"))) statfs->f_namemax = obj->Get(LOCAL_STRING("namemax"))->Uint32Value();
+NAN_INLINE static void bindings_set_statfs (Local<Context> context, struct statvfs *statfs, Local<Object> obj) { // from http://linux.die.net/man/2/stat
+  if (obj->Has(context, LOCAL_STRING("bsize")).FromJust()) statfs->f_bsize = obj->Get(context, LOCAL_STRING("bsize")).ToLocalChecked()->Uint32Value(context).FromJust();
+  if (obj->Has(context, LOCAL_STRING("frsize")).FromJust()) statfs->f_frsize = obj->Get(context, LOCAL_STRING("frsize")).ToLocalChecked()->Uint32Value(context).FromJust();
+  if (obj->Has(context, LOCAL_STRING("blocks")).FromJust()) statfs->f_blocks = obj->Get(context, LOCAL_STRING("blocks")).ToLocalChecked()->Uint32Value(context).FromJust();
+  if (obj->Has(context, LOCAL_STRING("bfree")).FromJust()) statfs->f_bfree = obj->Get(context, LOCAL_STRING("bfree")).ToLocalChecked()->Uint32Value(context).FromJust();
+  if (obj->Has(context, LOCAL_STRING("bavail")).FromJust()) statfs->f_bavail = obj->Get(context, LOCAL_STRING("bavail")).ToLocalChecked()->Uint32Value(context).FromJust();
+  if (obj->Has(context, LOCAL_STRING("files")).FromJust()) statfs->f_files = obj->Get(context, LOCAL_STRING("files")).ToLocalChecked()->Uint32Value(context).FromJust();
+  if (obj->Has(context, LOCAL_STRING("ffree")).FromJust()) statfs->f_ffree = obj->Get(context, LOCAL_STRING("ffree")).ToLocalChecked()->Uint32Value(context).FromJust();
+  if (obj->Has(context, LOCAL_STRING("favail")).FromJust()) statfs->f_favail = obj->Get(context, LOCAL_STRING("favail")).ToLocalChecked()->Uint32Value(context).FromJust();
+  if (obj->Has(context, LOCAL_STRING("fsid")).FromJust()) statfs->f_fsid = obj->Get(context, LOCAL_STRING("fsid")).ToLocalChecked()->Uint32Value(context).FromJust();
+  if (obj->Has(context, LOCAL_STRING("flag")).FromJust()) statfs->f_flag = obj->Get(context, LOCAL_STRING("flag")).ToLocalChecked()->Uint32Value(context).FromJust();
+  if (obj->Has(context, LOCAL_STRING("namemax")).FromJust()) statfs->f_namemax = obj->Get(context, LOCAL_STRING("namemax")).ToLocalChecked()->Uint32Value(context).FromJust();
 }
 
 class SetDirWorker : public Nan::AsyncWorker {
@@ -810,20 +811,22 @@ class SetDirWorker : public Nan::AsyncWorker {
 
 
 NAN_METHOD(OpCallback) {
-  bindings_t *b = bindings_mounted[info[0]->Uint32Value()];
-  b->result = (info.Length() > 1 && info[1]->IsNumber()) ? info[1]->Uint32Value() : 0;
+  bindings_t *b = bindings_mounted[To<uint>(info[0]).FromJust()];
+  b->result = (info.Length() > 1 && info[1]->IsNumber()) ? info[1].As<Number>()->Value() : 0;
   bindings_current = NULL;
+  Local<Context> context = info.GetIsolate()->GetCurrentContext();
+
   
   if (!b->result) {
     switch (b->op) {
       case OP_STATFS: {
-        if (info.Length() > 2 && info[2]->IsObject()) bindings_set_statfs((struct statvfs *) b->data, info[2].As<Object>());
+        if (info.Length() > 2 && info[2]->IsObject()) bindings_set_statfs(context, (struct statvfs *) b->data, info[2].As<Object>());
       }
       break;
 
       case OP_GETATTR:
       case OP_FGETATTR: {
-        if (info.Length() > 2 && info[2]->IsObject()) bindings_set_stat((struct FUSE_STAT *) b->data, info[2].As<Object>());
+        if (info.Length() > 2 && info[2]->IsObject()) bindings_set_stat(context, (struct FUSE_STAT *) b->data, info[2].As<Object>());
       }
       break;
 
@@ -835,7 +838,7 @@ NAN_METHOD(OpCallback) {
           
           for (uint32_t i = 0; i < dirs->Length(); i++) {
             
-            Nan::Utf8String dir(dirs->Get(i));
+            Nan::Utf8String dir(dirs->Get(context, i).ToLocalChecked());
             
             dirs_alloc[i] = (char *) malloc(1024);
             strcpy(dirs_alloc[i], *dir);
@@ -851,7 +854,7 @@ NAN_METHOD(OpCallback) {
       case OP_OPEN:
       case OP_OPENDIR: {
         if (info.Length() > 2 && info[2]->IsNumber()) {
-          b->info->fh = info[2].As<Number>()->Uint32Value();
+          b->info->fh = info[2].As<Number>()->Value();
         }
       }
       break;
@@ -1204,6 +1207,7 @@ NAN_METHOD(Mount) {
   mutex_unlock(&mutex);
 
   if (index == -1) return Nan::ThrowError("You cannot mount more than 1024 filesystem in one process");
+  Local<Context> context = info.GetIsolate()->GetCurrentContext();
 
   mutex_lock(&mutex);
   bindings_t *b = bindings_mounted[index];
@@ -1214,43 +1218,43 @@ NAN_METHOD(Mount) {
   Nan::Utf8String path(info[0]);
   Local<Object> ops = info[1].As<Object>();
 
-  b->ops_init = LOOKUP_CALLBACK(ops, "init");
-  b->ops_error = LOOKUP_CALLBACK(ops, "error");
-  b->ops_access = LOOKUP_CALLBACK(ops, "access");
-  b->ops_statfs = LOOKUP_CALLBACK(ops, "statfs");
-  b->ops_getattr = LOOKUP_CALLBACK(ops, "getattr");
-  b->ops_fgetattr = LOOKUP_CALLBACK(ops, "fgetattr");
-  b->ops_flush = LOOKUP_CALLBACK(ops, "flush");
-  b->ops_fsync = LOOKUP_CALLBACK(ops, "fsync");
-  b->ops_fsyncdir = LOOKUP_CALLBACK(ops, "fsyncdir");
-  b->ops_readdir = LOOKUP_CALLBACK(ops, "readdir");
-  b->ops_truncate = LOOKUP_CALLBACK(ops, "truncate");
-  b->ops_ftruncate = LOOKUP_CALLBACK(ops, "ftruncate");
-  b->ops_readlink = LOOKUP_CALLBACK(ops, "readlink");
-  b->ops_chown = LOOKUP_CALLBACK(ops, "chown");
-  b->ops_chmod = LOOKUP_CALLBACK(ops, "chmod");
-  b->ops_mknod = LOOKUP_CALLBACK(ops, "mknod");
-  b->ops_setxattr = LOOKUP_CALLBACK(ops, "setxattr");
-  b->ops_getxattr = LOOKUP_CALLBACK(ops, "getxattr");
-  b->ops_listxattr = LOOKUP_CALLBACK(ops, "listxattr");
-  b->ops_removexattr = LOOKUP_CALLBACK(ops, "removexattr");
-  b->ops_open = LOOKUP_CALLBACK(ops, "open");
-  b->ops_opendir = LOOKUP_CALLBACK(ops, "opendir");
-  b->ops_read = LOOKUP_CALLBACK(ops, "read");
-  b->ops_write = LOOKUP_CALLBACK(ops, "write");
-  b->ops_release = LOOKUP_CALLBACK(ops, "release");
-  b->ops_releasedir = LOOKUP_CALLBACK(ops, "releasedir");
-  b->ops_create = LOOKUP_CALLBACK(ops, "create");
-  b->ops_utimens = LOOKUP_CALLBACK(ops, "utimens");
-  b->ops_unlink = LOOKUP_CALLBACK(ops, "unlink");
-  b->ops_rename = LOOKUP_CALLBACK(ops, "rename");
-  b->ops_link = LOOKUP_CALLBACK(ops, "link");
-  b->ops_symlink = LOOKUP_CALLBACK(ops, "symlink");
-  b->ops_mkdir = LOOKUP_CALLBACK(ops, "mkdir");
-  b->ops_rmdir = LOOKUP_CALLBACK(ops, "rmdir");
-  b->ops_destroy = LOOKUP_CALLBACK(ops, "destroy");
+  b->ops_init = LOOKUP_CALLBACK(context, ops, "init");
+  b->ops_error = LOOKUP_CALLBACK(context, ops, "error");
+  b->ops_access = LOOKUP_CALLBACK(context, ops, "access");
+  b->ops_statfs = LOOKUP_CALLBACK(context, ops, "statfs");
+  b->ops_getattr = LOOKUP_CALLBACK(context, ops, "getattr");
+  b->ops_fgetattr = LOOKUP_CALLBACK(context, ops, "fgetattr");
+  b->ops_flush = LOOKUP_CALLBACK(context, ops, "flush");
+  b->ops_fsync = LOOKUP_CALLBACK(context, ops, "fsync");
+  b->ops_fsyncdir = LOOKUP_CALLBACK(context, ops, "fsyncdir");
+  b->ops_readdir = LOOKUP_CALLBACK(context, ops, "readdir");
+  b->ops_truncate = LOOKUP_CALLBACK(context, ops, "truncate");
+  b->ops_ftruncate = LOOKUP_CALLBACK(context, ops, "ftruncate");
+  b->ops_readlink = LOOKUP_CALLBACK(context, ops, "readlink");
+  b->ops_chown = LOOKUP_CALLBACK(context, ops, "chown");
+  b->ops_chmod = LOOKUP_CALLBACK(context, ops, "chmod");
+  b->ops_mknod = LOOKUP_CALLBACK(context, ops, "mknod");
+  b->ops_setxattr = LOOKUP_CALLBACK(context, ops, "setxattr");
+  b->ops_getxattr = LOOKUP_CALLBACK(context, ops, "getxattr");
+  b->ops_listxattr = LOOKUP_CALLBACK(context, ops, "listxattr");
+  b->ops_removexattr = LOOKUP_CALLBACK(context, ops, "removexattr");
+  b->ops_open = LOOKUP_CALLBACK(context, ops, "open");
+  b->ops_opendir = LOOKUP_CALLBACK(context, ops, "opendir");
+  b->ops_read = LOOKUP_CALLBACK(context, ops, "read");
+  b->ops_write = LOOKUP_CALLBACK(context, ops, "write");
+  b->ops_release = LOOKUP_CALLBACK(context, ops, "release");
+  b->ops_releasedir = LOOKUP_CALLBACK(context, ops, "releasedir");
+  b->ops_create = LOOKUP_CALLBACK(context, ops, "create");
+  b->ops_utimens = LOOKUP_CALLBACK(context, ops, "utimens");
+  b->ops_unlink = LOOKUP_CALLBACK(context, ops, "unlink");
+  b->ops_rename = LOOKUP_CALLBACK(context, ops, "rename");
+  b->ops_link = LOOKUP_CALLBACK(context, ops, "link");
+  b->ops_symlink = LOOKUP_CALLBACK(context, ops, "symlink");
+  b->ops_mkdir = LOOKUP_CALLBACK(context, ops, "mkdir");
+  b->ops_rmdir = LOOKUP_CALLBACK(context, ops, "rmdir");
+  b->ops_destroy = LOOKUP_CALLBACK(context, ops, "destroy");
 
-  Local<Value> tmp[] = {Nan::New<Number>(index), Nan::New<FunctionTemplate>(OpCallback)->GetFunction()};
+  Local<Value> tmp[] = {Nan::New<Number>(index), Nan::New<FunctionTemplate>(OpCallback)->GetFunction(context).ToLocalChecked()};
   b->callback = new Nan::Callback(callback_constructor->Call(2, tmp).As<Function>());
 
   strcpy(b->mnt, *path);
@@ -1309,10 +1313,11 @@ NAN_METHOD(SetBuffer) {
 NAN_METHOD(PopulateContext) {
   if (bindings_current == NULL) return Nan::ThrowError("You have to call this inside a fuse operation");
 
+  Local<Context> context = info.GetIsolate()->GetCurrentContext();
   Local<Object> ctx = info[0].As<Object>();
-  ctx->Set(LOCAL_STRING("uid"), Nan::New(bindings_current->context_uid));
-  ctx->Set(LOCAL_STRING("gid"), Nan::New(bindings_current->context_gid));
-  ctx->Set(LOCAL_STRING("pid"), Nan::New(bindings_current->context_pid));
+  ctx->Set(context, LOCAL_STRING("uid"), Nan::New(bindings_current->context_uid));
+  ctx->Set(context, LOCAL_STRING("gid"), Nan::New(bindings_current->context_gid));
+  ctx->Set(context, LOCAL_STRING("pid"), Nan::New(bindings_current->context_pid));
 }
 
 NAN_METHOD(Unmount) {
@@ -1326,12 +1331,13 @@ NAN_METHOD(Unmount) {
   Nan::AsyncQueueWorker(new UnmountWorker(new Nan::Callback(callback), path_alloc));
 }
 
-void Init(Handle<Object> exports) {
-  exports->Set(LOCAL_STRING("setCallback"), Nan::New<FunctionTemplate>(SetCallback)->GetFunction());
-  exports->Set(LOCAL_STRING("setBuffer"), Nan::New<FunctionTemplate>(SetBuffer)->GetFunction());
-  exports->Set(LOCAL_STRING("mount"), Nan::New<FunctionTemplate>(Mount)->GetFunction());
-  exports->Set(LOCAL_STRING("unmount"), Nan::New<FunctionTemplate>(Unmount)->GetFunction());
-  exports->Set(LOCAL_STRING("populateContext"), Nan::New<FunctionTemplate>(PopulateContext)->GetFunction());
+void Init(Local<Object> exports) {
+  Local<Context> context = exports->CreationContext();
+  exports->Set(context, LOCAL_STRING("setCallback"), Nan::New<FunctionTemplate>(SetCallback)->GetFunction(context).ToLocalChecked());
+  exports->Set(context, LOCAL_STRING("setBuffer"), Nan::New<FunctionTemplate>(SetBuffer)->GetFunction(context).ToLocalChecked());
+  exports->Set(context, LOCAL_STRING("mount"), Nan::New<FunctionTemplate>(Mount)->GetFunction(context).ToLocalChecked());
+  exports->Set(context, LOCAL_STRING("unmount"), Nan::New<FunctionTemplate>(Unmount)->GetFunction(context).ToLocalChecked());
+  exports->Set(context, LOCAL_STRING("populateContext"), Nan::New<FunctionTemplate>(PopulateContext)->GetFunction(context).ToLocalChecked());
 }
 
 NODE_MODULE(fuse_bindings, Init)
